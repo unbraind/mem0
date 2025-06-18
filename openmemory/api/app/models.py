@@ -61,6 +61,24 @@ class App(Base):
     )
 
 
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+    id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
+    key = Column(String, unique=True, index=True, default=lambda: secrets.token_urlsafe(32))
+    user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=get_current_utc_time)
+    last_used_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index('idx_apikey_user', 'user_id', 'is_active'),
+    )
+
+
 class Config(Base):
     __tablename__ = "configs"
     id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
@@ -176,6 +194,7 @@ class MemoryAccessLog(Base):
         Index('idx_access_memory_time', 'memory_id', 'accessed_at'),
         Index('idx_access_app_time', 'app_id', 'accessed_at'),
     )
+
 
 def categorize_memory(memory: Memory, db: Session) -> None:
     """Categorize a memory using OpenAI and store the categories in the database."""

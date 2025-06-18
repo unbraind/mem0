@@ -14,9 +14,10 @@ from app.utils.memory import get_memory_client
 from app.database import get_db
 from app.models import (
     Memory, MemoryState, MemoryAccessLog, App,
-    MemoryStatusHistory, User, Category, AccessControl, Config as ConfigModel
+    MemoryStatusHistory, User, Category, AccessControl, Config as ConfigModel, ApiKey
 )
 from app.schemas import MemoryResponse, PaginatedMemoryResponse
+from .auth import get_api_key
 from app.utils.permissions import check_memory_access_permissions
 
 router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
@@ -95,7 +96,8 @@ def get_accessible_memory_ids(db: Session, app_id: UUID) -> Set[UUID]:
 # List all memories with filtering
 @router.get("/", response_model=Page[MemoryResponse])
 async def list_memories(
-    user_id: str,
+    user_id: str, # This might become redundant if ApiKey implies user
+    api_key: ApiKey = Depends(get_api_key),
     app_id: Optional[UUID] = None,
     from_date: Optional[int] = Query(
         None,

@@ -7,7 +7,7 @@ def get_or_create_user(db: Session, user_id: str) -> User:
     """Get or create a user with the given user_id"""
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
-        user = User(user_id=user_id)
+        user = User(user_id=user_id, name=f"User {user_id}")
         db.add(user)
         db.commit()
         db.refresh(user)

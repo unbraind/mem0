@@ -231,18 +231,18 @@ def get_memory_client(custom_instructions: str = None):
                     # Update LLM configuration if available
                     if "llm" in mem0_config and mem0_config["llm"] is not None:
                         config["llm"] = mem0_config["llm"]
-                        
-                        # Fix Ollama URLs for Docker if needed
                         if config["llm"].get("provider") == "ollama":
-                            config["llm"] = _fix_ollama_urls(config["llm"])
+                            if 'config' not in config['llm']:
+                                config['llm']['config'] = {}
+                            config['llm']['config']['base_url'] = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
                     
                     # Update Embedder configuration if available
                     if "embedder" in mem0_config and mem0_config["embedder"] is not None:
                         config["embedder"] = mem0_config["embedder"]
-                        
-                        # Fix Ollama URLs for Docker if needed
                         if config["embedder"].get("provider") == "ollama":
-                            config["embedder"] = _fix_ollama_urls(config["embedder"])
+                            if 'config' not in config['embedder']:
+                                config['embedder']['config'] = {}
+                            config['embedder']['config']['ollama_base_url'] = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
             else:
                 print("No configuration found in database, using defaults")
                     

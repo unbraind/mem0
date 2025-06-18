@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from app.database import engine, Base, SessionLocal
 from app.mcp_server import setup_mcp_server
 from app.routers import memories_router, apps_router, stats_router, config_router
+from app.routers import auth as auth_router
+from app.routers import a2a as a2a_router # New A2A import
 from fastapi_pagination import add_pagination
 from fastapi.middleware.cors import CORSMiddleware
 from app.models import User, App
@@ -82,6 +84,8 @@ app.include_router(memories_router)
 app.include_router(apps_router)
 app.include_router(stats_router)
 app.include_router(config_router)
+app.include_router(auth_router.router)
+app.include_router(a2a_router.router) # Include the A2A router
 
 # Add pagination support
 add_pagination(app)
