@@ -18,6 +18,7 @@ ollama==0.4.8
 slowapi # For rate limiting
 redis # For slowapi Redis storage
 gunicorn # For production server
-passlib[bcrypt]
+passlib[bcrypt,argon2]
+argon2-cffi # For argon2 hashing
 python-jose[cryptography] # For JWT handling
 pydantic[email] # For email validation in schemas

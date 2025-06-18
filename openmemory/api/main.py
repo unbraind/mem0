@@ -127,12 +127,15 @@ create_default_app()
 # Setup MCP server
 setup_mcp_server(app)
 
+from app.routers import keys as keys_router # Import the new keys router
+
 # Include routers
 app.include_router(memories_router)
 app.include_router(apps_router)
 app.include_router(stats_router)
 app.include_router(config_router)
 app.include_router(auth_router.router)
+app.include_router(keys_router.router) # Include the new keys router
 app.include_router(a2a_router.router) # Include the A2A router
 
 # Add pagination support

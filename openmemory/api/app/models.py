@@ -27,9 +27,9 @@ class MemoryState(enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
-    user_id = Column(String, nullable=False, unique=True, index=True) # External-facing user identifier
-    name = Column(String, nullable=True, index=True)
-    email = Column(String, unique=True, nullable=False, index=True) # Email for login, must be non-nullable
+    username = Column(String, unique=True, nullable=False, index=True) # Username for login
+    name = Column(String, nullable=True, index=True) # Optional display name
+    email = Column(String, unique=True, nullable=False, index=True) # Email for login/recovery, must be non-nullable
     hashed_password = Column(String, nullable=False)
     metadata_ = Column('metadata', JSON, default=dict)
     created_at = Column(DateTime, default=get_current_utc_time, index=True)
@@ -66,9 +66,9 @@ class ApiKey(Base):
     __tablename__ = "api_keys"
     id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
     hashed_key = Column(String, unique=True, index=True)
-    salt = Column(String, nullable=False)
+    # salt field removed
     key_prefix = Column(String, nullable=False, index=True)
-    scopes = Column(String, nullable=False, default="memories:read,memories:write")
+    scopes = Column(JSON, nullable=False, default=lambda: ["memories:read", "memories:write"]) # Changed to JSON, default is a list
     user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -247,6 +247,36 @@ def after_memory_insert(mapper, connection, target):
     db = Session(bind=connection)
     categorize_memory(target, db)
     db.close()
+
+
+class A2ATaskStatus(str, enum.Enum):
+    SUBMITTED = "submitted"
+    WORKING = "working"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class A2ATask(Base):
+    __tablename__ = "a2a_tasks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # Ensure UUID type is explicit for postgres
+    task_id = Column(String, unique=True, nullable=False, index=True) # External unique task ID
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+
+    status = Column(sa.Enum(A2ATaskStatus), default=A2ATaskStatus.SUBMITTED, nullable=False, index=True)
+    method = Column(String, nullable=False) # Name of the method/tool to be executed
+    params = Column(JSON, nullable=True) # Parameters for the task
+    result = Column(JSON, nullable=True) # Result of the task execution
+
+    created_at = Column(DateTime, default=get_current_utc_time, index=True)
+    updated_at = Column(DateTime, default=get_current_utc_time, onupdate=get_current_utc_time, index=True)
+
+    user = relationship("User") # Defines M-to-1 relationship to User model
+
+    __table_args__ = (
+        Index('idx_a2a_task_status_updated_at', 'status', 'updated_at'),
+        Index('idx_a2a_task_user_created_at', 'user_id', 'created_at'),
+    )
 
 
 @event.listens_for(Memory, 'after_update')

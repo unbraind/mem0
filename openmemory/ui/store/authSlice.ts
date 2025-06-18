@@ -4,6 +4,7 @@ import { RootState } from './store'; // Assuming RootState is defined in store.t
 // Define the shape of the user object and auth state
 interface User {
   id: string; // Assuming UUID is string here
+  username: string; // Added username
   email: string;
   name?: string | null;
 }
@@ -11,6 +12,7 @@ interface User {
 interface AuthState {
   isAuthenticated: boolean;
   user: User | null;
+  accessToken: string | null; // Added accessToken
   status: 'idle' | 'loading' | 'succeeded' | 'failed';
   error: string | null;
 }
@@ -18,6 +20,7 @@ interface AuthState {
 const initialState: AuthState = {
   isAuthenticated: false,
   user: null,
+  accessToken: null, // Added accessToken
   status: 'idle', // 'idle' | 'loading' | 'succeeded' | 'failed'
   error: null,
 };
@@ -46,24 +49,22 @@ export const fetchUser = createAsyncThunk('auth/fetchUser', async (_, { rejectWi
 // Login user
 export const loginUser = createAsyncThunk(
   'auth/loginUser',
-  async (credentials: { email: string; password: string }, { dispatch, rejectWithValue }) => {
+  async (credentials: { username: string; password: string }, { dispatch, rejectWithValue }) => { // Changed email to username
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login', { // Ensure this path is correct, usually /api/auth/login
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-        credentials: 'include',
+        body: JSON.stringify(credentials), // Sends {username, password}
+        credentials: 'include', // Important for HttpOnly refresh cookie to be set by backend
       });
       if (!response.ok) {
         const errorData = await response.json();
         return rejectWithValue(errorData.detail || 'Login failed');
       }
-      // Login endpoint might not return the full user object, just a success message.
-      // So, dispatch fetchUser to get the user data and set cookie correctly.
+      const data = await response.json(); // Expects { access_token: "...", token_type: "bearer" }
+      // After successful login and getting the access token, fetch user details
       await dispatch(fetchUser());
-      // If login *does* return the user object directly and sets cookie, this can be simplified:
-      // const userData = await response.json(); return userData.user or similar.
-      return { success: true }; // Indicate login process success
+      return { accessToken: data.access_token }; // Return accessToken to be stored in state
     } catch (error: any) {
       return rejectWithValue(error.message || 'Network error');
     }
@@ -73,9 +74,10 @@ export const loginUser = createAsyncThunk(
 // Register user
 export const registerUser = createAsyncThunk(
   'auth/registerUser',
-  async (userData: { email: string; password: string; name?: string }, { rejectWithValue }) => {
+  // Updated userData to include username
+  async (userData: { username: string; email: string; password: string; name?: string }, { rejectWithValue }) => {
     try {
-      const response = await fetch('/api/auth/register', {
+      const response = await fetch('/api/auth/register', { // Ensure this path is correct
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),
@@ -120,7 +122,12 @@ const authSlice = createSlice({
     clearAuthError: (state) => {
       state.error = null;
     },
-    // Could add direct reducers like setUser, clearUser if needed for non-thunk actions
+    setAccessToken: (state, action: PayloadAction<string | null>) => {
+      state.accessToken = action.payload;
+      // Optionally, you could also infer isAuthenticated from the presence of a token,
+      // but usually, it's better to confirm with fetchUser.
+      // if (action.payload) state.isAuthenticated = true; else state.isAuthenticated = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -147,20 +154,21 @@ const authSlice = createSlice({
       // loginUser
       .addCase(loginUser.pending, (state) => {
         state.status = 'loading';
+        state.accessToken = null; // Clear previous token
         state.error = null;
       })
-      .addCase(loginUser.fulfilled, (state) => {
-        // User state will be updated by fetchUser dispatched within loginUser or if loginUser returned user data
-        // For now, just mark as succeeded if fetchUser is used. If loginUser sets user directly, update here.
-        state.status = 'succeeded'; // This might be quickly overwritten by fetchUser's pending/fulfilled
-        // If loginUser itself returned user data:
-        // state.isAuthenticated = true;
-        // state.user = action.payload.user;
+      .addCase(loginUser.fulfilled, (state, action: PayloadAction<{ accessToken: string }>) => {
+        // fetchUser will handle setting isAuthenticated and user.
+        // Here we just store the accessToken.
+        state.status = 'succeeded'; // Will be quickly followed by fetchUser states
+        state.accessToken = action.payload.accessToken;
+        // Do not set isAuthenticated here yet, let fetchUser confirm the user identity with the new token/cookie
       })
       .addCase(loginUser.rejected, (state, action) => {
         state.status = 'failed';
         state.isAuthenticated = false;
         state.user = null;
+        state.accessToken = null;
         state.error = action.payload as string;
       })
       // registerUser
@@ -186,6 +194,7 @@ const authSlice = createSlice({
         state.status = 'idle';
         state.isAuthenticated = false;
         state.user = null;
+        state.accessToken = null; // Clear access token on logout
         state.error = null;
       })
       .addCase(logoutUser.rejected, (state, action) => {
@@ -193,17 +202,19 @@ const authSlice = createSlice({
         // state.isAuthenticated and state.user should ideally still be cleared
         state.isAuthenticated = false;
         state.user = null;
+        state.accessToken = null; // Clear access token
         state.error = action.payload as string;
       });
   },
 });
 
-export const { clearAuthError } = authSlice.actions;
+export const { clearAuthError, setAccessToken } = authSlice.actions; // Export setAccessToken
 
 // Selectors
 export const selectIsAuthenticated = (state: RootState) => state.auth.isAuthenticated;
 export const selectUser = (state: RootState) => state.auth.user;
 export const selectAuthStatus = (state: RootState) => state.auth.status;
 export const selectAuthError = (state: RootState) => state.auth.error;
+export const selectAccessToken = (state: RootState) => state.auth.accessToken; // Export selectAccessToken
 
 export default authSlice.reducer;

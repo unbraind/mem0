@@ -16,6 +16,7 @@ export default function RegisterPage() {
   const authStatus = useSelector(selectAuthStatus);
   const authError = useSelector(selectAuthError);
 
+  const [username, setUsername] = useState(''); // Added username state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // Optional: Add name field if your UserCreate schema and backend support it
@@ -30,7 +31,7 @@ export default function RegisterPage() {
     e.preventDefault();
     dispatch(clearAuthError());
     // const userData = { email, password, name }; // Include name if using
-    const userData = { email, password };
+    const userData = { username, email, password }; // Added username to userData
     const resultAction = await dispatch(registerUser(userData));
 
     if (registerUser.fulfilled.match(resultAction)) {
@@ -64,6 +65,18 @@ export default function RegisterPage() {
               />
             </div>
             */}
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                placeholder="yourusername"
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={authStatus === 'loading'}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -10,6 +10,7 @@ DEFAULT_APP_ID = "openmemory"
 SECRET_KEY = os.getenv("SECRET_KEY", "your_super_secret_key_for_jwt_hs256_make_sure_it_is_strong_and_random_and_changed")
 ALGORITHM = "HS256" # Standard algorithm for JWT
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)) # Default to 1 day
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7)) # Default to 7 days
 
 def load_config():
     # Path to default_config.json, assuming execution from repo root /app

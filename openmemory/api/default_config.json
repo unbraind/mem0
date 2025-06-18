@@ -3,16 +3,19 @@
         "llm": {
             "provider": "ollama",
             "config": {
-                "model": "llama3.1:70b",
-                "ollama_base_url": "http://localhost:11434"
+                "model": "llama3",
+                "ollama_base_url": "http://host.docker.internal:11434"
             }
         },
         "embedder": {
             "provider": "ollama",
             "config": {
                 "model": "nomic-embed-text",
-                "ollama_base_url": "http://localhost:11434"
+                "ollama_base_url": "http://host.docker.internal:11434"
             }
+        },
+        "vector_store": {
+            "provider": "chroma"
         }
     }
-} 
+}

@@ -17,7 +17,7 @@ export default function LoginPage() {
   const authError = useSelector(selectAuthError);
   const isAuthenticated = useSelector(selectIsAuthenticated);
 
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState(''); // Changed from email to username
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     dispatch(clearAuthError()); // Clear previous errors
-    const resultAction = await dispatch(loginUser({ email, password }));
+    const resultAction = await dispatch(loginUser({ username, password })); // Changed email to username
     if (loginUser.fulfilled.match(resultAction)) {
       // Login thunk now dispatches fetchUser, so redirection is handled by useEffect
       // router.push('/'); // Or whatever your main dashboard page is
@@ -50,14 +50,14 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
+                id="username"
+                type="text"
+                placeholder="yourusername"
                 required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 disabled={authStatus === 'loading'}
               />
             </div>

@@ -28,29 +28,32 @@ config = {
     "vector_store": {
         "provider": "qdrant",
         "config": {
-            "collection_name": "test",
-            "host": "localhost",
-            "port": 6333,
-            "embedding_model_dims": 768,  # Change this according to your local model's dimensions
+            "collection_name": "test", # Example, adjust as needed
+            "host": "localhost",       # Example, adjust as needed for your Qdrant setup
+            "port": 6333,            # Example, adjust as needed
+            "embedding_model_dims": 768,  # Example, change this according to your local model's dimensions
         },
     },
     "llm": {
         "provider": "ollama",
         "config": {
-            "model": "llama3.1:latest",
+            "model": "llama3", # Default model, ensure you have pulled it: `ollama pull llama3`
             "temperature": 0,
             "max_tokens": 2000,
-            "ollama_base_url": "http://localhost:11434",  # Ensure this URL is correct
+            "ollama_base_url": "http://host.docker.internal:11434",
         },
     },
     "embedder": {
         "provider": "ollama",
         "config": {
-            "model": "nomic-embed-text:latest",
-            # Alternatively, you can use "snowflake-arctic-embed:latest"
-            "ollama_base_url": "http://localhost:11434",
+            "model": "nomic-embed-text", # Default model, ensure you have pulled it: `ollama pull nomic-embed-text`
+            "ollama_base_url": "http://host.docker.internal:11434",
         },
     },
+    # Example for OpenMemory API server default_config.json structure
+    # "vector_store": {
+    #     "provider": "chroma"
+    # }
 }
 
 # Initialize Memory with the configuration
@@ -65,11 +68,56 @@ memories = m.get_all(user_id="john")
 
 ### Key Points
 
-- **Configuration**: The setup involves configuring the vector store, language model, and embedding model to use local resources.
-- **Vector Store**: Qdrant is used as the vector store, running on localhost.
-- **Language Model**: Ollama is used as the LLM provider, with the "llama3.1:latest" model.
-- **Embedding Model**: Ollama is also used for embeddings, with the "nomic-embed-text:latest" model.
+- **Configuration**: The setup involves configuring the vector store, language model, and embedding model to use local resources. The example above is for direct `mem0` library use. If using the OpenMemory API server, these settings are typically in `openmemory/api/default_config.json` or a custom `config.json` (see note below).
+- **Vector Store**: The example uses Qdrant. The OpenMemory API server defaults to Chroma. Adjust your vector store configuration as needed.
+- **Ollama Models**: Ensure Ollama is running and you have pulled the specified models:
+  ```bash
+  ollama pull llama3
+  ollama pull nomic-embed-text
+  ```
+- **Ollama Base URL**: The `ollama_base_url` is key for connecting to your Ollama instance.
+
+### Docker Considerations for Local Ollama
+
+If you are running the OpenMemory API server (or a mem0-based application) inside a Docker container, and your Ollama instance is running directly on your host machine (outside Docker), you need to use a special URL for `ollama_base_url`.
+
+- **For Docker Desktop (Windows/Mac):** Use `http://host.docker.internal:11434`. The `host.docker.internal` DNS name is specially resolved by Docker to your host machine's IP address.
+
+- **For Linux Docker Hosts:** The `host.docker.internal` DNS name might not be available by default. You may need to add it when running your Docker container using the `--add-host` flag:
+  ```bash
+  docker run ... --add-host=host.docker.internal:host-gateway ... your_openmemory_image
+  ```
+  This maps `host.docker.internal` to the host's IP address via the Docker gateway.
+
+**Example `default_config.json` for OpenMemory API Server (Dockerized):**
+
+The OpenMemory API server uses a configuration file (e.g., `openmemory/api/default_config.json`). When running the API server in Docker and Ollama on the host, this file should reflect the Docker-aware URL:
+
+```json
+{
+  "mem0": {
+    "llm": {
+      "provider": "ollama",
+      "config": {
+        "model": "llama3",
+        "ollama_base_url": "http://host.docker.internal:11434"
+      }
+    },
+    "embedder": {
+      "provider": "ollama",
+      "config": {
+        "model": "nomic-embed-text",
+        "ollama_base_url": "http://host.docker.internal:11434"
+      }
+    },
+    "vector_store": {
+      "provider": "chroma"
+    }
+  }
+}
+```
+This configuration tells the OpenMemory API server (running in Docker) how to reach your local Ollama instance.
 
 ### Conclusion
 
-This local setup of Mem0 using Ollama provides a fully self-contained solution for memory management and AI interactions. It allows for greater control over your data and models while still leveraging the powerful capabilities of Mem0.
+This local setup of Mem0 using Ollama provides a fully self-contained solution for memory management and AI interactions. It allows for greater control over your data and models while still leveraging the powerful capabilities of Mem0. Remember to adjust network configurations like `ollama_base_url` based on whether your application is Dockerized.
