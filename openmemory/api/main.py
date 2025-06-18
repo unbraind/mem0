@@ -11,6 +11,7 @@ from app.database import engine, Base, SessionLocal
 from app.mcp_server import setup_mcp_server
 from app.routers import memories_router, apps_router, stats_router, config_router
 from app.routers import auth as auth_router
+from app.routers.auth import hash_password # Import for default user password hashing
 from app.routers import a2a as a2a_router # New A2A import
 from fastapi_pagination import add_pagination
 from fastapi.middleware.cors import CORSMiddleware
@@ -65,10 +66,24 @@ def create_default_user():
         user = db.query(User).filter(User.user_id == USER_ID).first()
         if not user:
             # Create default user
+            # Create default user
+            default_email = f"{USER_ID}@example.com"
+            default_password = "defaultpassword" # Consider making this more secure or configurable
+
+            # Check if email already exists (e.g. if USER_ID is "admin" and admin@example.com is taken)
+            existing_email_user = db.query(User).filter(User.email == default_email).first()
+            if existing_email_user:
+                print(f"Default user email {default_email} already exists. Skipping default user creation with this email.")
+                # Potentially link existing email user to USER_ID if appropriate, or handle error
+                return
+
+
             user = User(
                 id=uuid4(),
                 user_id=USER_ID,
                 name="Default User",
+                email=default_email,
+                hashed_password=hash_password(default_password),
                 created_at=datetime.datetime.now(datetime.UTC)
             )
             db.add(user)

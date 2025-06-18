@@ -31,7 +31,6 @@ class User(Base):
     name = Column(String, nullable=True, index=True)
     email = Column(String, unique=True, nullable=False, index=True) # Email for login, must be non-nullable
     hashed_password = Column(String, nullable=False)
-    salt = Column(String, nullable=False)
     metadata_ = Column('metadata', JSON, default=dict)
     created_at = Column(DateTime, default=get_current_utc_time, index=True)
     updated_at = Column(DateTime,

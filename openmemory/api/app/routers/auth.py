@@ -9,6 +9,7 @@ from fastapi.security.api_key import APIKeyHeader
 from sqlalchemy.orm import Session
 from pydantic import EmailStr # इंश्योर pydantic is installed with email validation support
 from jose import JWTError, jwt
+from passlib.context import CryptContext
 
 from app.database import get_db
 from app.models import ApiKey, User
@@ -36,14 +37,14 @@ router = APIRouter(
     tags=["auth"],
 )
 
-# --- Password Utilities ---
-def create_salt_and_hashed_password(password: str) -> tuple[str, str]:
-    salt = secrets.token_hex(16)
-    hashed_password = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
-    return salt, hashed_password
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def verify_password(plain_password: str, salt: str, hashed_password: str) -> bool:
-    return hashlib.sha256((plain_password + salt).encode('utf-8')).hexdigest() == hashed_password
+# --- Password Utilities ---
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
 
 # --- JWT Utilities ---
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -60,7 +61,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 def get_user_by_email(db: Session, email: EmailStr) -> Optional[User]:
     return db.query(User).filter(User.email == email).first()
 
-def get_user_by_id(db: Session, user_id: UUID) -> Optional[User]: # user_id is User.id (PK, UUID)
+def get_user_by_id(db: Session, user_id: uuid.UUID) -> Optional[User]: # user_id is User.id (PK, UUID)
     return db.query(User).filter(User.id == user_id).first()
 
 # --- Current User Dependency (JWT Cookie Based) ---
@@ -87,7 +88,7 @@ async def get_current_user(
             raise credentials_exception
 
         try:
-            user_uuid = UUID(user_id_str) # Validate that 'sub' is a valid UUID string
+            user_uuid = uuid.UUID(user_id_str) # Validate that 'sub' is a valid UUID string
         except ValueError:
             raise credentials_exception # Invalid UUID format in token
 
@@ -97,7 +98,7 @@ async def get_current_user(
         raise credentials_exception
 
     # Fetch user by User.id (UUID)
-    user = get_user_by_id(db, user_id=UUID(token_data.user_id)) # type: ignore # Ensure UUID(token_data.user_id)
+    user = get_user_by_id(db, user_id=uuid.UUID(token_data.user_id)) # type: ignore # Ensure UUID(token_data.user_id)
     if user is None:
         raise credentials_exception
     return user
@@ -110,7 +111,7 @@ async def register_user(request: Request, user_in: schemas.UserCreate, db: Sessi
     if db_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
-    salt, hashed_password = create_salt_and_hashed_password(user_in.password)
+    hashed_password = hash_password(user_in.password)
 
     # Create a unique external-facing user_id (User.user_id in model)
     external_user_id = f"user_{secrets.token_hex(8)}"
@@ -121,7 +122,6 @@ async def register_user(request: Request, user_in: schemas.UserCreate, db: Sessi
         user_id=external_user_id,
         email=user_in.email,
         hashed_password=hashed_password,
-        salt=salt,
         name=user_in.email.split('@')[0] # Default name from email prefix
     )
     db.add(new_user)
@@ -138,7 +138,7 @@ async def login_for_access_token(
     db: Session = Depends(get_db)
 ):
     user = get_user_by_email(db, email=form_data.email)
-    if not user or not verify_password(form_data.password, user.salt, user.hashed_password):
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
