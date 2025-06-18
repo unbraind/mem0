@@ -1,11 +1,12 @@
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc
 
 from app.database import get_db
-from app.models import App, Memory, MemoryAccessLog, MemoryState
+from app.models import App, Memory, MemoryAccessLog, MemoryState, ApiKey
+from app.routers.auth import verify_api_key_scope, SCOPES_APPS_READ, SCOPES_APPS_WRITE
 
 router = APIRouter(prefix="/api/v1/apps", tags=["apps"])
 
@@ -25,7 +26,8 @@ async def list_apps(
     sort_direction: str = 'asc',
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_APPS_READ]))
 ):
     # Create a subquery for memory counts
     memory_counts = db.query(
@@ -101,7 +103,8 @@ async def list_apps(
 @router.get("/{app_id}")
 async def get_app_details(
     app_id: UUID,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_APPS_READ]))
 ):
     app = get_app_or_404(db, app_id)
 
@@ -128,7 +131,8 @@ async def list_app_memories(
     app_id: UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_APPS_READ]))
 ):
     get_app_or_404(db, app_id)
     query = db.query(Memory).filter(
@@ -164,7 +168,8 @@ async def list_app_accessed_memories(
     app_id: UUID,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_APPS_READ]))
 ):
     
     # Get memories with access counts
@@ -215,7 +220,8 @@ async def list_app_accessed_memories(
 async def update_app_details(
     app_id: UUID,
     is_active: bool,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_APPS_WRITE]))
 ):
     app = get_app_or_404(db, app_id)
     app.is_active = is_active

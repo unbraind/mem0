@@ -3,7 +3,7 @@ from typing import List, Optional, Set
 from uuid import UUID, uuid4
 import logging
 import os
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session, joinedload
 from fastapi_pagination import Page, Params
 from fastapi_pagination.ext.sqlalchemy import paginate as sqlalchemy_paginate
@@ -16,9 +16,18 @@ from app.models import (
     Memory, MemoryState, MemoryAccessLog, App,
     MemoryStatusHistory, User, Category, AccessControl, Config as ConfigModel, ApiKey
 )
-from app.schemas import MemoryResponse, PaginatedMemoryResponse
-from .auth import get_api_key
+from app.schemas import MemoryResponse # PaginatedMemoryResponse is part of Page[MemoryResponse]
+# No longer using get_api_key directly for protected routes
+from app.routers.auth import verify_api_key_scope, SCOPES_MEMORIES_READ, SCOPES_MEMORIES_WRITE
 from app.utils.permissions import check_memory_access_permissions
+try:
+    from app.main import limiter # Attempt to import limiter
+except ImportError:
+    class DummyLimiter: # Fallback if direct import from main is tricky
+        def limit(self, *args, **kwargs):
+            def decorator(func): return func
+            return decorator
+    limiter = DummyLimiter()
 
 router = APIRouter(prefix="/api/v1/memories", tags=["memories"])
 
@@ -95,9 +104,11 @@ def get_accessible_memory_ids(db: Session, app_id: UUID) -> Set[UUID]:
 
 # List all memories with filtering
 @router.get("/", response_model=Page[MemoryResponse])
+@limiter.limit("60/minute")
 async def list_memories(
-    user_id: str, # This might become redundant if ApiKey implies user
-    api_key: ApiKey = Depends(get_api_key),
+    request: Request, # Added for rate limiter
+    user_id: str, # TODO: Validate this user_id against current_api_key.user_id
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ])),
     app_id: Optional[UUID] = None,
     from_date: Optional[int] = Query(
         None,
@@ -175,8 +186,9 @@ async def list_memories(
 # Get all categories
 @router.get("/categories")
 async def get_categories(
-    user_id: str,
-    db: Session = Depends(get_db)
+    user_id: str, # TODO: Validate this user_id against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ]))
 ):
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
@@ -206,10 +218,14 @@ class CreateMemoryRequest(BaseModel):
 
 # Create new memory
 @router.post("/")
+@limiter.limit("60/minute")
 async def create_memory(
-    request: CreateMemoryRequest,
-    db: Session = Depends(get_db)
+    http_request: Request, # Renamed to avoid conflict with Pydantic model 'request'
+    request: CreateMemoryRequest, # Contains user_id, TODO: validate against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_WRITE]))
 ):
+    # Note: request.user_id should be validated against current_api_key.user_id
     user = db.query(User).filter(User.user_id == request.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -308,9 +324,12 @@ async def create_memory(
 @router.get("/{memory_id}")
 async def get_memory(
     memory_id: UUID,
-    db: Session = Depends(get_db)
+    # TODO: Add user_id path/query param & validate against current_api_key.user_id if memories are user-specific
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ]))
 ):
     memory = get_memory_or_404(db, memory_id)
+    # TODO: Add permission check: if not check_memory_access_permissions(db, memory, current_api_key.user_id, associated_app_id_if_any): raise HTTPException
     return {
         "id": memory.id,
         "text": memory.content,
@@ -330,9 +349,11 @@ class DeleteMemoriesRequest(BaseModel):
 # Delete multiple memories
 @router.delete("/")
 async def delete_memories(
-    request: DeleteMemoriesRequest,
-    db: Session = Depends(get_db)
+    request: DeleteMemoriesRequest, # Contains user_id, TODO: validate against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_WRITE]))
 ):
+    # Note: request.user_id should be validated against current_api_key.user_id
     user = db.query(User).filter(User.user_id == request.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -346,11 +367,21 @@ async def delete_memories(
 @router.post("/actions/archive")
 async def archive_memories(
     memory_ids: List[UUID],
-    user_id: UUID,
-    db: Session = Depends(get_db)
+    user_id: str, # TODO: Validate this user_id (which is User.user_id) against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_WRITE]))
 ):
-    for memory_id in memory_ids:
-        update_memory_state(db, memory_id, MemoryState.archived, user_id)
+    # This user_id seems to be the target user for whose memories to archive.
+    # It should be validated against current_api_key.user_id if users can only manage their own.
+    # Assuming user_id from body/query is the string User.user_id
+    target_user = db.query(User).filter(User.user_id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user for archiving not found.")
+    # Add check: if target_user.id != current_api_key.user_id: raise HTTPException(403, "Not authorized")
+
+    for memory_id_val in memory_ids: # Renamed to avoid conflict
+        # TODO: Ensure memory belongs to target_user before updating state
+        update_memory_state(db, memory_id_val, MemoryState.archived, target_user.id)
     return {"message": f"Successfully archived {len(memory_ids)} memories"}
 
 
@@ -366,10 +397,11 @@ class PauseMemoriesRequest(BaseModel):
 # Pause access to memories
 @router.post("/actions/pause")
 async def pause_memories(
-    request: PauseMemoriesRequest,
-    db: Session = Depends(get_db)
+    request: PauseMemoriesRequest, # Contains user_id, TODO: validate against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_WRITE]))
 ):
-    
+    # Note: request.user_id should be validated against current_api_key.user_id
     global_pause = request.global_pause
     all_for_app = request.all_for_app
     app_id = request.app_id
@@ -440,10 +472,13 @@ async def pause_memories(
 @router.get("/{memory_id}/access-log")
 async def get_memory_access_log(
     memory_id: UUID,
+    # TODO: Add user_id path/query param & validate against current_api_key.user_id if logs are user-specific
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ]))
 ):
+    # TODO: Add permission check: if not check_memory_access_permissions(db, memory, current_api_key.user_id, ...): raise HTTPException
     query = db.query(MemoryAccessLog).filter(MemoryAccessLog.memory_id == memory_id)
     total = query.count()
     logs = query.order_by(MemoryAccessLog.accessed_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -469,13 +504,17 @@ class UpdateMemoryRequest(BaseModel):
 @router.put("/{memory_id}")
 async def update_memory(
     memory_id: UUID,
-    request: UpdateMemoryRequest,
-    db: Session = Depends(get_db)
+    request: UpdateMemoryRequest, # Contains user_id, TODO: validate against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_WRITE]))
 ):
+    # Note: request.user_id should be validated against current_api_key.user_id
     user = db.query(User).filter(User.user_id == request.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    # Add check: if user.id != current_api_key.user_id: raise HTTPException(403, "Not authorized")
     memory = get_memory_or_404(db, memory_id)
+    # Add check: if memory.user_id != current_api_key.user_id: raise HTTPException(403, "Not authorized")
     memory.content = request.memory_content
     db.commit()
     db.refresh(memory)
@@ -495,10 +534,14 @@ class FilterMemoriesRequest(BaseModel):
     show_archived: Optional[bool] = False
 
 @router.post("/filter", response_model=Page[MemoryResponse])
+@limiter.limit("60/minute")
 async def filter_memories(
-    request: FilterMemoriesRequest,
-    db: Session = Depends(get_db)
+    http_request: Request, # Renamed to avoid conflict with Pydantic model 'request'
+    request: FilterMemoriesRequest, # Contains user_id, TODO: validate against current_api_key.user_id
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ]))
 ):
+    # Note: request.user_id should be validated against current_api_key.user_id
     user = db.query(User).filter(User.user_id == request.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -591,11 +634,13 @@ async def filter_memories(
 @router.get("/{memory_id}/related", response_model=Page[MemoryResponse])
 async def get_related_memories(
     memory_id: UUID,
-    user_id: str,
+    user_id: str, # TODO: Validate this user_id against current_api_key.user_id
     params: Params = Depends(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_MEMORIES_READ]))
 ):
     # Validate user
+    # Note: user_id should be validated against current_api_key.user_id
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")

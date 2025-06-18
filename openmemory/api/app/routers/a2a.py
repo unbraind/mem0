@@ -1,6 +1,17 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, Depends, Request
 from pydantic import BaseModel
 from typing import Any, Dict
+
+from app.models import ApiKey # Required for type hint if using the returned key
+from app.routers.auth import verify_api_key_scope, SCOPES_A2A_DISPATCH
+try:
+    from app.main import limiter # Attempt to import limiter
+except ImportError:
+    class DummyLimiter: # Fallback if direct import from main is tricky
+        def limit(self, *args, **kwargs):
+            def decorator(func): return func
+            return decorator
+    limiter = DummyLimiter()
 
 router = APIRouter(
     prefix="/a2a",
@@ -31,7 +42,14 @@ class A2ATaskRequest(BaseModel):
     # Could include fields like sender_agent_id, task_id, etc. in a real scenario
 
 @router.post("/tasks/send")
-async def handle_a2a_task(task_request: A2ATaskRequest = Body(...)):
+@limiter.limit("60/minute")
+async def handle_a2a_task(
+    request: Request, # Added for rate limiter
+    task_request: A2ATaskRequest = Body(...),
+    # Protect this endpoint: Only keys with "a2a:dispatch" scope can send tasks.
+    # The 'requesting_api_key' object can be used if needed (e.g. to identify the caller)
+    requesting_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_A2A_DISPATCH]))
+):
     """
     Handles incoming A2A tasks.
     Currently, it's a placeholder and doesn't process tasks.

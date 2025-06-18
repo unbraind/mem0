@@ -1,6 +1,7 @@
 import uuid
 import hashlib
 import secrets
+import os # Added for environment variable access
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 
@@ -151,13 +152,22 @@ async def login_for_access_token(
         expires_delta=access_token_expires
     )
 
+    # Determine cookie security flags based on environment
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    cookie_secure = False
+    cookie_samesite = "lax"
+
+    if ENVIRONMENT == "production":
+        cookie_secure = True
+        cookie_samesite = "strict"
+
     response.set_cookie(
         key="openmemory_access_token",
         value=access_token,
         httponly=True, # Makes it inaccessible to JavaScript
         max_age=int(access_token_expires.total_seconds()),
-        samesite="lax", # Basic CSRF protection
-        secure=False,  # In production, set to True (requires HTTPS)
+        samesite=cookie_samesite, # Set based on environment
+        secure=cookie_secure,  # Set based on environment
         path="/",
     )
     return {"message": "Login successful", "user_id": str(user.id), "email": user.email}
@@ -203,8 +213,18 @@ async def get_api_key( # This is for X-API-Key header based authentication
 # --- API Key Scope Verification Dependency (for X-API-Key header auth) ---
 def verify_api_key_scope(required_scopes: List[str]):
     async def _verify_scope(api_key: ApiKey = Depends(get_api_key)): # Uses X-API-Key
+        # 1. Check for expiration
+        if api_key.expires_at and datetime.now(timezone.utc) > api_key.expires_at:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API Key has expired.")
+
+        # 2. Check for scopes
+        # If required_scopes is empty, any key (even one with no scopes) is technically valid from a scope perspective.
+        if not required_scopes:
+            return api_key # No specific scopes required, so key is valid in this context.
+
+        # If scopes are required, but the key has none, it's an issue.
         if not api_key.scopes:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions: Key has no scopes defined.")
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions: Key has no scopes defined, but scopes are required.")
 
         key_scopes = set(api_key.scopes.split(','))
         for required_scope in required_scopes:
@@ -221,7 +241,25 @@ SCOPES_KEY_READ = "keys:read"
 SCOPES_KEY_MANAGE = "keys:manage" # Includes create, delete, potentially update
 SCOPES_MEMORIES_READ = "memories:read"
 SCOPES_MEMORIES_WRITE = "memories:write"
-DEFAULT_API_KEY_SCOPES = [SCOPES_MEMORIES_READ, SCOPES_MEMORIES_WRITE]
+SCOPES_A2A_DISPATCH = "a2a:dispatch"
+SCOPES_CONFIG_READ = "config:read"
+SCOPES_CONFIG_WRITE = "config:write"
+SCOPES_APPS_READ = "apps:read"
+SCOPES_APPS_WRITE = "apps:write"
+SCOPES_STATS_READ = "stats:read"
+
+DEFAULT_API_KEY_SCOPES = [
+    SCOPES_MEMORIES_READ,
+    SCOPES_MEMORIES_WRITE,
+    SCOPES_A2A_DISPATCH,
+    SCOPES_CONFIG_READ,
+    SCOPES_CONFIG_WRITE,
+    SCOPES_APPS_READ,
+    SCOPES_APPS_WRITE,
+    SCOPES_STATS_READ,
+    # Note: key management scopes (keys:read, keys:manage) are typically not default.
+    # They should be granted explicitly to keys that need to manage other keys.
+]
 
 
 # --- API Key Management Endpoints (protected by API Key scopes) ---
@@ -231,12 +269,17 @@ async def create_api_key(
     request: Request, # Add request for limiter
     name: str = Body(None),
     scopes: List[str] = Body(None),
+    expires_at: Optional[datetime] = Body(None), # New parameter for expiration
     db: Session = Depends(get_db),
     # This endpoint is protected by an API key that must have "keys:manage" scope.
     # The user_id for the new key will be the user_id of the managing_api_key.
     managing_api_key: ApiKey = Depends(verify_api_key_scope([SCOPES_KEY_MANAGE]))
 ):
     user_id_for_new_key = managing_api_key.user_id
+
+    # Validate expires_at
+    if expires_at and expires_at <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expiration date must be in the future.")
 
     plain_api_key = secrets.token_urlsafe(32)
     salt = secrets.token_urlsafe(16)
@@ -256,15 +299,22 @@ async def create_api_key(
         hashed_key=hashed_key,
         salt=salt,
         key_prefix=key_prefix,
-        scopes=assigned_scopes_str
+        scopes=assigned_scopes_str,
+        expires_at=expires_at # Set expires_at if provided
     )
     db.add(new_api_key_entry)
     db.commit()
     db.refresh(new_api_key_entry)
 
     return {
-        "api_key": plain_api_key, "id": new_api_key_entry.id, "name": new_api_key_entry.name,
-        "key_prefix": new_api_key_entry.key_prefix, "scopes": new_api_key_entry.scopes.split(',')
+        "api_key": plain_api_key,
+        "id": new_api_key_entry.id,
+        "name": new_api_key_entry.name,
+        "key_prefix": new_api_key_entry.key_prefix,
+        "scopes": new_api_key_entry.scopes.split(','),
+        "expires_at": new_api_key_entry.expires_at.isoformat() if new_api_key_entry.expires_at else None,
+        "created_at": new_api_key_entry.created_at.isoformat(), # Add created_at for completeness
+        "is_active": new_api_key_entry.is_active # Add is_active status
     }
 
 @router.get("/keys", response_model_exclude_none=True)
