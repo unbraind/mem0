@@ -5,12 +5,14 @@ import Stats from "@/components/dashboard/Stats";
 import { MemoryFilters } from "@/app/memories/components/MemoryFilters";
 import { MemoriesSection } from "@/app/memories/components/MemoriesSection";
 import "@/styles/animation.css";
+import ProtectedRoute from "@/components/ProtectedRoute"; // Import ProtectedRoute
 
 export default function DashboardPage() {
   return (
-    <div className="text-white py-6">
-      <div className="container">
-        <div className="w-full mx-auto space-y-6">
+    <ProtectedRoute>
+      <div className="text-white py-6">
+        <div className="container">
+          <div className="w-full mx-auto space-y-6">
           <div className="grid grid-cols-3 gap-6">
             {/* Memory Category Breakdown */}
             <div className="col-span-2 animate-fade-slide-down">
@@ -31,8 +33,9 @@ export default function DashboardPage() {
               <MemoriesSection />
             </div>
           </div>
+          </div>
         </div>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 }

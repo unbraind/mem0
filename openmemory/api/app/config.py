@@ -4,6 +4,13 @@ import json
 USER_ID = os.getenv("USER", "default_user")
 DEFAULT_APP_ID = "openmemory"
 
+# JWT Settings
+# It's highly recommended to set SECRET_KEY via an environment variable.
+# The default value here is insecure and only for demonstration/development.
+SECRET_KEY = os.getenv("SECRET_KEY", "your_super_secret_key_for_jwt_hs256_make_sure_it_is_strong_and_random_and_changed")
+ALGORITHM = "HS256" # Standard algorithm for JWT
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 60 * 24)) # Default to 1 day
+
 def load_config():
     # Path to default_config.json, assuming execution from repo root /app
     config_path = 'openmemory/api/default_config.json'

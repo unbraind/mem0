@@ -7,22 +7,32 @@ services:
       - mem0_storage:/mem0/storage
     networks:
       - openmemory_network
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - openmemory_network
+    volumes:
+      - redis_data:/data
   openmemory-mcp:
     image: mem0/openmemory-mcp
     build: api/
     environment:
       - USER
       - API_KEY
+      - REDIS_URL=redis://redis:6379 # Added for slowapi
     env_file:
       - api/.env
     depends_on:
       - mem0_store
       - ollama # MCP depends on Ollama
+      - redis # Added dependency
     ports:
       - "8765:8765"
     volumes:
       - ./api:/usr/src/openmemory
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8765", "--reload"]
+    command: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "main:app", "-b", "0.0.0.0:8765"] # Changed to gunicorn
     networks:
       - openmemory_network
   openmemory-ui:
@@ -50,6 +60,7 @@ services:
 volumes:
   mem0_storage:
   ollama_data:
+  redis_data: # Added volume for Redis persistence
 
 networks:
   openmemory_network:

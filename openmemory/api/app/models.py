@@ -27,9 +27,11 @@ class MemoryState(enum.Enum):
 class User(Base):
     __tablename__ = "users"
     id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
-    user_id = Column(String, nullable=False, unique=True, index=True)
+    user_id = Column(String, nullable=False, unique=True, index=True) # External-facing user identifier
     name = Column(String, nullable=True, index=True)
-    email = Column(String, unique=True, nullable=True, index=True)
+    email = Column(String, unique=True, nullable=False, index=True) # Email for login, must be non-nullable
+    hashed_password = Column(String, nullable=False)
+    salt = Column(String, nullable=False)
     metadata_ = Column('metadata', JSON, default=dict)
     created_at = Column(DateTime, default=get_current_utc_time, index=True)
     updated_at = Column(DateTime,
@@ -64,7 +66,10 @@ class App(Base):
 class ApiKey(Base):
     __tablename__ = "api_keys"
     id = Column(UUID, primary_key=True, default=lambda: uuid.uuid4())
-    key = Column(String, unique=True, index=True, default=lambda: secrets.token_urlsafe(32))
+    hashed_key = Column(String, unique=True, index=True)
+    salt = Column(String, nullable=False)
+    key_prefix = Column(String, nullable=False, index=True)
+    scopes = Column(String, nullable=False, default="memories:read,memories:write")
     user_id = Column(UUID, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
@@ -75,7 +80,8 @@ class ApiKey(Base):
     user = relationship("User")
 
     __table_args__ = (
-        Index('idx_apikey_user', 'user_id', 'is_active'),
+        Index('idx_apikey_user_id_is_active', 'user_id', 'is_active'), # Renamed index
+        Index('idx_apikey_key_prefix', 'key_prefix'), # Added index for key_prefix
     )
 
 

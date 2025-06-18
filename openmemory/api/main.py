@@ -1,5 +1,12 @@
 import datetime
-from fastapi import FastAPI
+import os # For environment variables
+from fastapi import FastAPI, Request # Request for rate limiter key_func
+from slowapi import Limiter, _rate_limit_exceeded_handler # Rate limiting
+from slowapi.util import get_remote_address # Rate limiting
+from slowapi.errors import RateLimitExceeded # Rate limiting
+from slowapi.middleware import SlowAPIMiddleware # If using middleware application
+# For direct application to app: from slowapi.extension import FastAPILimiter
+
 from app.database import engine, Base, SessionLocal
 from app.mcp_server import setup_mcp_server
 from app.routers import memories_router, apps_router, stats_router, config_router
@@ -11,18 +18,44 @@ from app.models import User, App
 from uuid import uuid4
 from app.config import USER_ID, DEFAULT_APP_ID
 
+# Initialize Rate Limiter
+# Using REDIS_URL from env for storage, fallback to memory for local dev/testing
+# Ensure REDIS_URL is set in your environment for production: e.g., "redis://localhost:6379"
+redis_url = os.getenv("REDIS_URL", "memory://")
+limiter = Limiter(key_func=get_remote_address, storage_uri=redis_url, strategy="fixed-window") # strategy can be configured
+
 app = FastAPI(title="OpenMemory API")
+
+# Add state for the limiter and an exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Apply SlowAPIMiddleware if you want to apply limits globally or by route pattern in some cases
+# However, for specific endpoint decorators, just initializing Limiter and adding to app.state is enough.
+# app.add_middleware(SlowAPIMiddleware) # Not strictly needed if only using decorators
+
+# CORS Configuration
+allowed_origins_csv = os.getenv("ALLOWED_ORIGINS_CSV", "http://localhost:3000,http://127.0.0.1:3000")
+allowed_origins_list = [origin.strip() for origin in allowed_origins_csv.split(',')]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins_list,
+    allow_credentials=True, # Important for cookies
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"], # Specify methods
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"], # Specify headers
 )
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
+
+# TODO: Apply @limiter.limit decorators to specific endpoints in their respective router files.
+# Example for auth.py:
+# from main import limiter # (Adjust import path if main.limiter is not directly accessible)
+# @router.post("/login")
+# @limiter.limit("5/minute")
+# async def login_for_access_token(...): ...
+# This needs to be done in openmemory/api/app/routers/auth.py for the specific routes.
 
 # Check for USER_ID and create default user if needed
 def create_default_user():

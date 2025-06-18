@@ -122,3 +122,9 @@ How to contribute:
 5. Open a Pull Request
 
 Join us in building the future of AI memory management! Your contributions help make OpenMemory better for everyone.
+
+## Security Vulnerability Scanning
+Regularly scan project dependencies for known vulnerabilities using tools like:
+*   `pip-audit install -r requirements.txt` (for the backend API)
+*   [Snyk](https://snyk.io/) (can be integrated for both frontend and backend)
+*   `npm audit` or `pnpm audit` (for the frontend UI)

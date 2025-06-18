@@ -146,22 +146,22 @@ def get_default_memory_config():
             }
         },
         "llm": {
-            "provider": "openai",
+            "provider": "ollama",
             "config": {
-                "model": "gpt-4o-mini",
-                "temperature": 0.1,
-                "max_tokens": 2000,
-                "api_key": "env:OPENAI_API_KEY"
+                "model": "llama3.1:latest", # Default Ollama LLM model
+                "ollama_base_url": "http://localhost:11434" # Will be processed by _fix_ollama_urls
+                # No API key needed for local Ollama
             }
         },
         "embedder": {
-            "provider": "openai",
+            "provider": "ollama",
             "config": {
-                "model": "text-embedding-3-small",
-                "api_key": "env:OPENAI_API_KEY"
+                "model": "nomic-embed-text", # Default Ollama embedding model
+                "ollama_base_url": "http://localhost:11434" # Will be processed by _fix_ollama_urls
+                # No API key needed for local Ollama
             }
         },
-        "version": "v1.1"
+        "version": "v1.1" # Ensure this is the version expected by mem0 library
     }
 
 
