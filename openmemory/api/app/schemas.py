@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, EmailStr
 
+# Existing Schemas (Memory, Category, App) - Keep them as they are
 class MemoryBase(BaseModel):
     content: str
     metadata_: Optional[dict] = Field(default_factory=dict)
@@ -62,3 +63,39 @@ class PaginatedMemoryResponse(BaseModel):
     page: int
     size: int
     pages: int
+
+# New User Schemas
+class UserBase(BaseModel):
+    email: EmailStr
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(UserBase):
+    password: str
+
+class UserResponse(UserBase):
+    id: UUID # This is the internal UUID PK
+    name: Optional[str] = None
+    # user_id: str # This is the external-facing user_id from the model, if needed in response
+
+    class Config:
+        from_attributes = True
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class TokenData(BaseModel):
+    user_id: Optional[str] = None # This will store the User.id (UUID) as a string in JWT 'sub'
+    # In older versions or different setups, this might be 'username' or 'email'.
+    # Using user.id (the UUID PK) is a common practice for 'sub'.
+    # Renamed from task: sub: Optional[str] = None to user_id for clarity in our context
+    # as we will store the user's User.id (PK) in the 'sub' claim.
+
+class ConfigEntry(BaseModel):
+    key: str
+    value: dict
+
+    class Config:
+        from_attributes = True

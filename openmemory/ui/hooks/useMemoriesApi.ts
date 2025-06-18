@@ -133,7 +133,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
           sort_column: filters?.sortColumn?.toLowerCase(),
           sort_direction: filters?.sortDirection,
           show_archived: filters?.showArchived
-        }
+        },
+        { withCredentials: true } // Add this line
       );
 
       const adaptedMemories: Memory[] = response.data.items.map((item: ApiMemoryItem) => ({
@@ -168,8 +169,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
         text: text,
         infer: false,
         app: "openmemory",
-      }
-      await axios.post<ApiMemoryItem>(`${URL}/api/v1/memories/`, memoryData);
+      };
+      await axios.post<ApiMemoryItem>(`${URL}/api/v1/memories/`, memoryData, { withCredentials: true });
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to create memory';
       setError(errorMessage);
@@ -181,7 +182,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
   const deleteMemories = async (memory_ids: string[]) => {
     try {
       await axios.delete(`${URL}/api/v1/memories/`, {
-        data: { memory_ids, user_id }
+        data: { memory_ids, user_id },
+        withCredentials: true // Add this line
       });
       dispatch(setMemoriesSuccess(memories.filter((memory: Memory) => !memory_ids.includes(memory.id))));
     } catch (err: any) {
@@ -200,7 +202,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
     setError(null);
     try {
       const response = await axios.get<SimpleMemory>(
-        `${URL}/api/v1/memories/${memoryId}?user_id=${user_id}`
+        `${URL}/api/v1/memories/${memoryId}?user_id=${user_id}`,
+        { withCredentials: true } // Add this line
       );
       setIsLoading(false);
       dispatch(setSelectedMemory(response.data));
@@ -220,7 +223,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
     setError(null);
     try {
       const response = await axios.get<AccessLogResponse>(
-        `${URL}/api/v1/memories/${memoryId}/access-log?page=${page}&page_size=${pageSize}`
+        `${URL}/api/v1/memories/${memoryId}/access-log?page=${page}&page_size=${pageSize}`,
+        { withCredentials: true } // Add this line
       );
       setIsLoading(false);
       dispatch(setAccessLogs(response.data.logs));
@@ -240,7 +244,8 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
     setError(null);
     try {
       const response = await axios.get<RelatedMemoriesResponse>(
-        `${URL}/api/v1/memories/${memoryId}/related?user_id=${user_id}`
+        `${URL}/api/v1/memories/${memoryId}/related?user_id=${user_id}`,
+        { withCredentials: true } // Add this line
       );
 
       const adaptedMemories: Memory[] = response.data.items.map((item: RelatedMemoryItem) => ({
@@ -275,7 +280,7 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
         memory_id: memoryId,
         memory_content: content,
         user_id: user_id
-      });
+      }, { withCredentials: true }); // Add this line
       setIsLoading(false);
       setHasUpdates(hasUpdates + 1);
     } catch (err: any) {
@@ -298,7 +303,7 @@ export const useMemoriesApi = (): UseMemoriesApiReturn => {
         all_for_app: true,
         state: state,
         user_id: user_id
-      });
+      }, { withCredentials: true }); // Add this line
       dispatch(setMemoriesSuccess(memories.map((memory: Memory) => {
         if (memoryIds.includes(memory.id)) {
           return { ...memory, state: state as "active" | "paused" | "archived" | "deleted" };

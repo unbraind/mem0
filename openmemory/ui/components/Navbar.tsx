@@ -11,11 +11,17 @@ import { useMemoriesApi } from "@/hooks/useMemoriesApi";
 import Image from "next/image";
 import { useStats } from "@/hooks/useStats";
 import { useAppsApi } from "@/hooks/useAppsApi";
-import { Settings } from "lucide-react";
+import { Settings, LogOut, LogIn, UserPlus } from "lucide-react"; // Added icons
 import { useConfig } from "@/hooks/useConfig";
+import { useDispatch, useSelector } from "react-redux"; // Added Redux hooks
+import { AppDispatch } from "@/store/store"; // Added AppDispatch
+import { selectIsAuthenticated, selectUser, logoutUser } from "@/store/authSlice"; // Added auth selectors/actions
 
 export function Navbar() {
   const pathname = usePathname();
+  const dispatch = useDispatch<AppDispatch>();
+  const isAuthenticated = useSelector(selectIsAuthenticated);
+  const user = useSelector(selectUser);
 
   const memoriesApi = useMemoriesApi();
   const appsApi = useAppsApi();
@@ -158,6 +164,45 @@ export function Navbar() {
             Refresh
           </Button>
           <CreateMemoryDialog />
+
+          {/* Auth Section */}
+          {isAuthenticated && user ? (
+            <>
+              <span className="text-sm text-zinc-300 hidden md:block">Welcome, {user.name || user.email}</span>
+              <Button
+                onClick={() => dispatch(logoutUser())}
+                variant="outline"
+                size="sm"
+                className="border-zinc-700/50 bg-zinc-900 hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <LogOut size={16} />
+                Logout
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-zinc-700/50 bg-zinc-900 hover:bg-zinc-800 flex items-center gap-2"
+                >
+                  <LogIn size={16} />
+                  Login
+                </Button>
+              </Link>
+              <Link href="/register">
+                <Button
+                  variant="default" // Or outline, depending on desired emphasis
+                  size="sm"
+                  className="flex items-center gap-2"
+                >
+                  <UserPlus size={16} />
+                  Register
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </header>

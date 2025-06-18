@@ -15,3 +15,6 @@ pytest-cov>=4.0.0
 tenacity==9.1.2
 anthropic==0.51.0
 ollama==0.4.8
+slowapi # For rate limiting
+redis # For slowapi Redis storage
+gunicorn # For production server

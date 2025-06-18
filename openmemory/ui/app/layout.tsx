@@ -5,6 +5,7 @@ import { Navbar } from "@/components/Navbar";
 import { Toaster } from "@/components/ui/toaster";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Providers } from "./providers";
+import AuthInitializer from "@/components/AuthInitializer"; // Import AuthInitializer
 
 export const metadata = {
   title: "OpenMemory - Developer Dashboard",
@@ -27,9 +28,11 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            <Navbar />
-            <ScrollArea className="h-[calc(100vh-64px)]">{children}</ScrollArea>
-            <Toaster />
+            <AuthInitializer> {/* Wrap content with AuthInitializer */}
+              <Navbar />
+              <ScrollArea className="h-[calc(100vh-64px)]">{children}</ScrollArea>
+              <Toaster />
+            </AuthInitializer>
           </ThemeProvider>
         </Providers>
       </body>

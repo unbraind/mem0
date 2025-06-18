@@ -5,9 +5,11 @@ import appsReducer from './appsSlice';
 import uiReducer from './uiSlice';
 import filtersReducer from './filtersSlice';
 import configReducer from './configSlice';
+import authReducer from './authSlice'; // Import the auth reducer
 
 export const store = configureStore({
   reducer: {
+    auth: authReducer, // Add auth reducer
     memories: memoriesReducer,
     profile: profileReducer,
     apps: appsReducer,
